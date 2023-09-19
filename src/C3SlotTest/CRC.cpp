@@ -3,6 +3,11 @@
 
 uint16_t checksumCalculator(uint8_t * data, uint16_t length)
 {
+   // Our command should not be zero except for ACK from S3 to C3.
+   if(data[0] == 0)//|| data[0] == 255)
+   {
+      return 0;
+   }
    uint16_t curr_crc = 0x0000;
    uint8_t sum1 = (uint8_t) curr_crc;
    uint8_t sum2 = (uint8_t) (curr_crc >> 8);

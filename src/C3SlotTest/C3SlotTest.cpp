@@ -37,7 +37,7 @@ ESP32SPISlave slave;
 
 byte newLEDdata[3];
 boolean newDataAvail = false;
-static constexpr uint32_t BUFFER_SIZE{32};
+static constexpr uint32_t BUFFER_SIZE{8};
 uint8_t spi_slave_tx_buf[BUFFER_SIZE];
 uint8_t spi_slave_rx_buf[BUFFER_SIZE];
 
@@ -166,7 +166,7 @@ void set_buffer()
 {
     for (uint32_t i = 0; i < BUFFER_SIZE; i++)
     {
-        spi_slave_tx_buf[i] = (0xFF - i) & 0xFF;
+        spi_slave_tx_buf[i] = 0;
     }
     memset(spi_slave_rx_buf, 0, BUFFER_SIZE);
 }
@@ -191,27 +191,26 @@ void task_process_buffer(void *pvParameters)
         // digitalWrite(SLOT_TP1pin, HIGH);
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        uint16_t checkSum = checksumCalculator(spi_slave_rx_buf, 4);
-        spi_slave_tx_buf[0] = checkSum;
-        spi_slave_tx_buf[1] = checkSum >> 8;
-        spi_slave_tx_buf[2] = slot_data1_out & 0xFF;
-        spi_slave_tx_buf[3] = (slot_data1_out >> 8) & 0xFF;
+        slot_data1_out = 5000;
+        spi_slave_tx_buf[0] = spi_slave_rx_buf[0];
+        spi_slave_tx_buf[1] = slot_data1_out & 0xFF;
+        spi_slave_tx_buf[2] = (slot_data1_out >> 8) & 0xFF;
+        // Last two bytes are check sum 
+        uint16_t checkSum = checksumCalculator(spi_slave_tx_buf,6);
+        spi_slave_tx_buf[6] = checkSum & 0xFF;
+        spi_slave_tx_buf[7] = (checkSum >> 8) & 0xFF;
 
-        if (spi_slave_rx_buf[0] == '$' && spi_slave_rx_buf[4] == '\n')
+        
+        uint16_t checkSumFromS3 = checksumCalculator(spi_slave_rx_buf, 6);
+
+        // if checksum is valid
+        if(checkSumFromS3 == (spi_slave_rx_buf[6] | (spi_slave_rx_buf[7] << 8)) && checkSumFromS3 != 0)
         {
-            // newDataAvail = true;
-            // newLEDdata[0] = spi_slave_rx_buf[1];
-            if (spi_slave_rx_buf[1] != slot_type1_id && spi_slave_rx_buf[1]< 9)
+            if (spi_slave_rx_buf[5] != slot_type1_id && spi_slave_rx_buf[5]< 9)
             {
-                slot_type1_id = spi_slave_rx_buf[1];
-                // config.slot_type1_id_json = slot_type1_id;
-                // saveConfiguration(filename,config);
-                // first_run = true;
+                slot_type1_id = spi_slave_rx_buf[5];
             }
-            // newLEDdata[1] = spi_slave_rx_buf[2];
-            // newLEDdata[2] = spi_slave_rx_buf[3];
         }
-
         slave.pop();
 
         xTaskNotifyGive(task_handle_wait_spi);
@@ -418,6 +417,7 @@ void loop()
         {
             config.slot_type1_id_json = slot_type1_id;
             saveConfiguration(filename, config);
+            delay(100);
             first_run = true;
         }
         else if (slot_type1_id == 9)

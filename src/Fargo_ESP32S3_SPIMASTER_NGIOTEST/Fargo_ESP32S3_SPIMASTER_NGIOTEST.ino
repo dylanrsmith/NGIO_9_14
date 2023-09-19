@@ -34,6 +34,8 @@ int count = 0;
 
 int slot_type = 1;
 int output1 = 0;
+
+int command = 9;
 void etherCAT_read(){
   // Get values of PDO outputs
   slot_type = EasyCAT_BufferOut.Cust.type;
@@ -122,7 +124,7 @@ void setup()
 void loop()
 {
   digitalWrite(logic_pin, HIGH);
-  Serial.println("Start of loop");
+  // Serial.println("Start of loop");
 
   EasyCAT_MainTask();
   etherCAT_read();
@@ -139,7 +141,7 @@ void loop()
     
     for (int i = 1; i <= numberOfSlots; i++)
     {
-      writeSlotBoard(i, slot_type, redColor, blueColor);
+      writeSlotBoard(i, command, slot_type, blueColor);
     }
   }
   delayMicroseconds(100);
