@@ -26,19 +26,21 @@ SPIClass *vspi = NULL;
 bool passFailArray[100];
 int current = 0;
 int previous = 0;
-byte testData = 0;
-byte redColor = 255;
-byte greenColor = 255;
-byte blueColor = 255;
+uint8_t testData = 0;
+uint8_t redColor = 255;
+uint8_t greenColor = 255;
+uint8_t blueColor = 255;
 int count = 0;
 
-int slot_type = 1;
-int output1 = 0;
+uint8_t slot_type = 1;
+uint8_t output1 = 0;
 
-int command = 9;
+uint8_t command = 1;
 void etherCAT_read(){
   // Get values of PDO outputs
-  slot_type = EasyCAT_BufferOut.Cust.type;
+  if(EasyCAT_BufferOut.Cust.type != 0){
+    slot_type = EasyCAT_BufferOut.Cust.type;
+  }
   output1 = EasyCAT_BufferOut.Cust.Output1;
 }
 
@@ -123,7 +125,6 @@ void setup()
 
 void loop()
 {
-  digitalWrite(logic_pin, HIGH);
   // Serial.println("Start of loop");
 
   EasyCAT_MainTask();
@@ -139,11 +140,19 @@ void loop()
     
     digitalWrite(PIN_LED, !digitalRead(PIN_LED));
     
+    digitalWrite(logic_pin, HIGH);
     for (int i = 1; i <= numberOfSlots; i++)
     {
+      //writeSlotBoardOnce(i, command, slot_type, false, true);
       writeSlotBoard(i, command, slot_type, blueColor);
     }
+    // delayMicroseconds(500);
+
+    // for (int i = 1; i <= numberOfSlots; i++)
+    // {
+    //   writeSlotBoardOnce(i, command, slot_type, true, true);
+    // }
+    digitalWrite(logic_pin, LOW);
   }
-  delayMicroseconds(100);
-  digitalWrite(logic_pin, LOW);
+  delayMicroseconds(10);
 }   

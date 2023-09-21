@@ -15,11 +15,10 @@
 // #include <RBD_Timer.h>
 
 #include "esp_log.h"
+static const char *TAG = "DebugTest";
 
 const int slot_swversion1_id = 0;
 const int slot_swversion2_id = 1;
-
-const char* TAG = "DEBUG";
 
 // freq out settings
 bool DEBUG_FLAG = false;
@@ -177,16 +176,15 @@ void task_process_buffer(void *pvParameters)
         // digitalWrite(SLOT_TP1pin, HIGH);
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        Serial.print("RX: ");
-        for(int i = 0; i<8; i++){
-            Serial.printf("%d ",spi_slave_rx_buf[i]);
-        }
-        Serial.println();
-
         uint16_t checkSumFromS3 = checksumCalculatorCRC(spi_slave_rx_buf, 6);
         // if checksum is valid
-        // if(checkSumFromS3 == (spi_slave_rx_buf[6] | (spi_slave_rx_buf[7] << 8)) && checkSumFromS3 != 0)
+        if(checkSumFromS3 == (spi_slave_rx_buf[6] | (spi_slave_rx_buf[7] << 8)) && checkSumFromS3 != 0)
         {
+            Serial.print("RX: ");
+            for(int i = 0; i<8; i++){
+                Serial.printf("%d ",spi_slave_rx_buf[i]);
+            }
+            Serial.println();
 
             if (spi_slave_rx_buf[5] != slot_type1_id && spi_slave_rx_buf[5]< 9)
             {
@@ -195,15 +193,13 @@ void task_process_buffer(void *pvParameters)
             
             // slot_data1_out = 5000;
             spi_slave_tx_buf[0] = spi_slave_rx_buf[0];
-            spi_slave_tx_buf[1] = spi_slave_rx_buf[1]+10;//slot_data1_out & 0xFF;
-            spi_slave_tx_buf[2] = spi_slave_rx_buf[2]+10;//(slot_data1_out >> 8) & 0xFF;
-            spi_slave_tx_buf[3] = spi_slave_rx_buf[3];
-            spi_slave_tx_buf[4] = spi_slave_rx_buf[4];
-            spi_slave_tx_buf[5] = spi_slave_rx_buf[5];  //slot_type1_id;
+            spi_slave_tx_buf[1] = slot_data1_out;// & 0xFF;
+            spi_slave_tx_buf[2] = (slot_data1_out >> 8);// & 0xFF;
+            spi_slave_tx_buf[5] = slot_type1_id;
             // Last two bytes are check sum 
             uint16_t checkSum = checksumCalculatorCRC(spi_slave_tx_buf,6);
-            spi_slave_tx_buf[6] = spi_slave_rx_buf[6];//checkSum & 0xFF;
-            spi_slave_tx_buf[7] = spi_slave_rx_buf[7];//(checkSum >> 8) & 0xFF;
+            spi_slave_tx_buf[6] = checkSum & 0xFF;
+            spi_slave_tx_buf[7] = (checkSum >> 8) & 0xFF;
 
         
             Serial.print("TX: ");
