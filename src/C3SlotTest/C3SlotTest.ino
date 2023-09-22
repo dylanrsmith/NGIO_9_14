@@ -13,13 +13,16 @@
 #include "ResetReason.h"
 #include "esp_log.h"
 // #include <RBD_Timer.h>
-
 #include "esp_log.h"
+#include <atomic>
+
+std::atomic<int> data_out(0);
+std::atomic<int> slot_type(0);
 
 const int slot_swversion1_id = 0;
 const int slot_swversion2_id = 1;
 
-const char* TAG = "DEBUG";
+const char *TAG = "DEBUG";
 
 // freq out settings
 bool DEBUG_FLAG = false;
@@ -38,12 +41,12 @@ ESP32SPISlave slave;
 
 byte newLEDdata[3];
 boolean newDataAvail = false;
-static constexpr uint32_t BUFFER_SIZE{8};
+static constexpr uint32_t BUFFER_SIZE{32};
 uint8_t spi_slave_tx_buf[BUFFER_SIZE];
 uint8_t spi_slave_rx_buf[BUFFER_SIZE];
 
 int slot_number; // Possible future use
-uint8_t slot_type1_id;
+// uint8_t slot_type1_id;
 int slot_type2_id;
 int slot_type3_id;
 int slot_type4_id;
@@ -178,42 +181,42 @@ void task_process_buffer(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         Serial.print("RX: ");
-        for(int i = 0; i<8; i++){
-            Serial.printf("%d ",spi_slave_rx_buf[i]);
+        for (int i = 0; i < 8; i++)
+        {
+            Serial.printf("%d ", spi_slave_rx_buf[i]);
         }
         Serial.println();
 
-        uint16_t checkSumFromS3 = checksumCalculatorCRC(spi_slave_rx_buf, 6);
-        // if checksum is valid
-        // if(checkSumFromS3 == (spi_slave_rx_buf[6] | (spi_slave_rx_buf[7] << 8)) && checkSumFromS3 != 0)
+        if (spi_slave_rx_buf[0] == '$' && spi_slave_rx_buf[4] == '\n')
         {
 
-            if (spi_slave_rx_buf[5] != slot_type1_id && spi_slave_rx_buf[5]< 9)
+            uint16_t slot_data1_out = data_out.load();
+            uint8_t slot_type1_id = slot_type.load();
+            if (spi_slave_rx_buf[2] != slot_type1_id && spi_slave_rx_buf[2]< 9)
             {
-                slot_type1_id = spi_slave_rx_buf[5];
+                slot_type1_id = spi_slave_rx_buf[2];
             }
-            
-            // slot_data1_out = 5000;
-            spi_slave_tx_buf[0] = spi_slave_rx_buf[0];
-            spi_slave_tx_buf[1] = spi_slave_rx_buf[1]+10;//slot_data1_out & 0xFF;
-            spi_slave_tx_buf[2] = spi_slave_rx_buf[2]+10;//(slot_data1_out >> 8) & 0xFF;
+            uint16_t checkSum = checksumCalculator(spi_slave_rx_buf, 5);
+            spi_slave_tx_buf[0] = checkSum;
+            spi_slave_tx_buf[1] = checkSum >> 8;
+            spi_slave_tx_buf[2] = slot_type1_id;
             spi_slave_tx_buf[3] = spi_slave_rx_buf[3];
             spi_slave_tx_buf[4] = spi_slave_rx_buf[4];
-            spi_slave_tx_buf[5] = spi_slave_rx_buf[5];  //slot_type1_id;
-            // Last two bytes are check sum 
-            uint16_t checkSum = checksumCalculatorCRC(spi_slave_tx_buf,6);
-            spi_slave_tx_buf[6] = spi_slave_rx_buf[6];//checkSum & 0xFF;
-            spi_slave_tx_buf[7] = spi_slave_rx_buf[7];//(checkSum >> 8) & 0xFF;
+            spi_slave_tx_buf[5] = spi_slave_rx_buf[5];
+            // spi_slave_tx_buf[6] = spi_slave_rx_buf[6];
+            // spi_slave_tx_buf[7] = spi_slave_rx_buf[7];
+            
 
-        
             Serial.print("TX: ");
-            for(int i = 0; i<8; i++){
-                Serial.printf("%d ",spi_slave_tx_buf[i]);
+            for (int i = 0; i < 8; i++)
+            {
+                Serial.printf("%d ", spi_slave_tx_buf[i]);
             }
             Serial.println();
         }
         slave.pop();
 
+        slot_type.store(slot_data1_out);
         xTaskNotifyGive(task_handle_wait_spi);
         // digitalWrite(SLOT_TP1pin, LOW);
     }
@@ -232,10 +235,12 @@ void setup()
 
     loadConfiguration(filename, config);
     slot_number = config.slot_number_json;
-    slot_type1_id = config.slot_type1_id_json;
+    uint8_t slot_type1_id = config.slot_type1_id_json;
     slot_type2_id = config.slot_type2_id_json;
     slot_type3_id = config.slot_type3_id_json;
     slot_type4_id = config.slot_type4_id_json;
+
+    slot_type.store(slot_type1_id);
 
     Serial.printf("Slot_type_ids: %d.%d.%d.%d\n", slot_type1_id, slot_type2_id, slot_type3_id, slot_type4_id);
     Serial.printf("Slot version: %d.%d SW:%d.%d\n", slot_hwversion1_id, slot_hwversion2_id, slot_swversion1_id, slot_swversion2_id);
@@ -261,7 +266,7 @@ void setup()
     xTaskCreatePinnedToCore(task_process_buffer, "task_process_buffer", 2048, NULL, 2, &task_handle_process_buffer, CORE_TASK_PROCESS_BUFFER);
 
     // TBD CORE_DEBUG_LEVEL=3
-    Serial.printf("##############Value:%d", slot_type1_id);
+    // Serial.printf("##############Value:%d", slot_type1_id);
     switch (slot_type1_id)
     {
 
@@ -333,6 +338,9 @@ const unsigned long interval = 1000; // 1 second
 
 void loop()
 {
+    uint8_t slot_type1_id = slot_type.load();
+    Serial.printf("slot_type: %d\n",slot_type1_id); //Slot type overwritten to zero?????
+
     digitalWrite(SLOT_TP1pin, HIGH);
     delayMicroseconds(10);
 
@@ -352,7 +360,7 @@ void loop()
         }
     }
 
-    RGBled.setPixelColor(0, primaryColors[slot_type1_id]);    
+    RGBled.setPixelColor(0, primaryColors[slot_type1_id]);
     RGBled.show();
 
     // Serial.printf("Slot type set to: %d, data1_out: %d\n", slot_type1_id,slot_data1_out);
@@ -368,11 +376,11 @@ void loop()
         break;
     case 2: // DI-0200	Digital Input
         slot_data1_out = digitalRead(SLOT_IO0pin);
-        //Serial.printf("Digital Input: %d\n", slot_data1_out);
+        // Serial.printf("Digital Input: %d\n", slot_data1_out);
         break;
     case 3: // DI-0300	Analog Input
         slot_data1_out = analogRead(SLOT_IO0pin);
-        //Serial.printf("Analog Input: %d\n", slot_data1_out);
+        // Serial.printf("Analog Input: %d\n", slot_data1_out);
         break;
     case 4: // AO-0400	Analog Output
         slot_data1_out = 5000;
@@ -398,7 +406,7 @@ void loop()
         // Serial.printf("Freq Output duty: %d\n", duty);
         break;
     case 7: // RL-0700	CAN	CAN	7
-        slot_data1_out = 7000;  
+        slot_data1_out = 7000;
         // TWIA message count, send message, spi slave.
         // Serial.printf("CAN TBD: %d\n", slot_data1_out);
         break;
@@ -435,15 +443,7 @@ void loop()
         }
     }
 
-    // if (FEIDEBUG)
-    // {
-    //     unsigned long currentMillis = millis();
-    //     if (currentMillis - SerialpreviousMillis >= interval)
-    //     {
-    //         SerialpreviousMillis = currentMillis;
-    //         // Investigate LOGE
-    //         Serial.printf("Test turning off logging, for code to execute properly\n");
-    //     }
-    // }
+    data_out.store(slot_data1_out);
+    slot_type.store(slot_type1_id);
     digitalWrite(SLOT_TP1pin, LOW);
 }
